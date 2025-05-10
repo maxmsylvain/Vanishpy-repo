@@ -1,0 +1,21 @@
+vanish/
+├── app.py                 # Main Flask application
+├── config.py              # Configuration settings
+├── requirements.txt       # Python dependencies
+├── static/                # Static files (CSS, JS, images)
+│   ├── css/
+│   │   └── style.css      # Main stylesheet
+│   ├── js/
+│   │   └── script.js      # Frontend JavaScript
+│   └── images/
+├── templates/             # HTML templates
+│   ├── base.html          # Base template with common elements
+│   ├── index.html         # Homepage
+│   ├── login.html         # Login page
+│   ├── register.html      # Registration page
+│   ├── feed.html          # Main feed of posts
+│   └── profile.html       # User profile page
+└── models/                # Database models
+    ├── __init__.py
+    ├── user.py            # User model
+    └── post.py            # Post model
