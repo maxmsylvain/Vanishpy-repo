@@ -9,26 +9,21 @@ from werkzeug.utils import secure_filename
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import TypeDecorator, DateTime
 
-# Initialize Flask app
 app = Flask(__name__)
 app.config.from_object('config.Config')
 
-# Initialize database
 db = SQLAlchemy(app)
 
-# Initialize login manager
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Configure allowed image extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Custom SQLAlchemy Type for UTC Timezone Handling
 class TimezoneUTC(TypeDecorator):
     impl = DateTime
     cache_ok = True
@@ -45,7 +40,6 @@ class TimezoneUTC(TypeDecorator):
             return value.replace(tzinfo=timezone.utc)
         return value
 
-# Import models - defined here to avoid circular imports
 followers = db.Table('followers',
     db.Column('follower_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('followed_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
@@ -61,10 +55,8 @@ class User(UserMixin, db.Model):
     bio = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
 
-    # Relationships
     posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")
-    
-    #relationship to implement followers
+
     followed = db.relationship(
         'User', secondary=followers,
         primaryjoin=(followers.c.follower_id == id),
@@ -95,8 +87,7 @@ class User(UserMixin, db.Model):
         ).filter(followers.c.follower_id == self.id)
         
         own = Post.query.filter_by(user_id=self.id)
-        
-        # Combine and sort by newest first
+
         return followed.union(own).order_by(Post.created_at.desc())
 
 class Post(db.Model):
@@ -106,17 +97,14 @@ class Post(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(TimezoneUTC, default=lambda: datetime.now(timezone.utc), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    # New field for reply relationships
+
     parent_id = db.Column(db.Integer, db.ForeignKey('posts.id'), nullable=True)
-    
-    # Relationship to track replies to this post
+
     replies = db.relationship('Post', 
                              backref=db.backref('parent', remote_side=[id]),
                              lazy='dynamic',
                              cascade="all, delete-orphan")
 
-    # This property will be calculated dynamically and is not stored in the database
     remaining_time = None
 
     def __repr__(self):
@@ -135,7 +123,6 @@ class Post(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Initialize scheduler for post deletion
 scheduler = BackgroundScheduler()
 scheduler.start()
 
@@ -148,10 +135,8 @@ def delete_expired_posts():
     db.session.commit()
     print(f"Deleted {len(expired_posts)} expired posts")
 
-# Schedule the delete_expired_posts function to run every 10 minutes
 scheduler.add_job(delete_expired_posts, 'interval', minutes=10)
 
-# Routes
 @app.route('/')
 def index():
     """Homepage route"""
@@ -210,13 +195,12 @@ def logout():
 def create_post():
     """Create a new post or reply"""
     content = request.form.get('content')
-    parent_id = request.form.get('parent_id')  # Get parent_id if this is a reply
+    parent_id = request.form.get('parent_id') 
     
     if not content:
         flash('Post cannot be empty')
         return redirect(url_for('feed'))
-        
-    # Create new post with parent_id if it's a reply
+
     new_post = Post(
         content=content, 
         user_id=current_user.id,
@@ -225,10 +209,8 @@ def create_post():
     
     db.session.add(new_post)
     db.session.commit()
-    
-    # Redirect to the appropriate page
+
     if parent_id:
-        # If this was a reply, redirect back to the post with the reply visible
         return redirect(url_for('feed') + f'#post-{parent_id}')
     else:
         return redirect(url_for('feed'))
@@ -240,13 +222,11 @@ def get_post_replies(post_id):
     now_utc = datetime.now(timezone.utc)
     cutoff = now_utc - timedelta(hours=3)
     
-    # Get all replies that haven't expired
     replies = Post.query.filter(
         Post.parent_id == post_id,
         Post.created_at > cutoff
     ).order_by(Post.created_at.asc()).all()
     
-    # Calculate remaining time for each reply
     replies_data = []
     for reply in replies:
         expiration_time = reply.created_at + timedelta(hours=3)
@@ -308,13 +288,13 @@ def edit_profile():
                 user.profile_pic = f'images/profile_pics/{new_filename}'
             except Exception as e:
                 flash(f'Error saving profile picture: {e}', 'error')
-                print(f"Error saving profile picture: {e}") # Log the exception
+                print(f"Error saving profile picture: {e}")
                 return redirect(url_for('profile', username=current_user.username))
         else:
             flash('Invalid file type for profile picture. Allowed types are: png, jpg, jpeg, gif', 'warning')
-            print('Error: Invalid file type.') # Log invalid type
+            print('Error: Invalid file type.')
     else:
-        print("No profile picture was uploaded.") # Log if no file
+        print("No profile picture was uploaded.")
 
     db.session.commit()
     flash('Profile updated successfully!', 'success')
@@ -364,10 +344,8 @@ def search():
     if not query:
         return render_template('search.html', query='', users=[], posts=[])
     
-    # Search for users
     users = User.query.filter(User.username.ilike(f'%{query}%')).limit(10).all()
     
-    # Search for posts
     now_utc = datetime.now(timezone.utc)
     cutoff = now_utc - timedelta(hours=3)
     posts = Post.query.filter(
@@ -375,7 +353,6 @@ def search():
         Post.created_at > cutoff
     ).order_by(Post.created_at.desc()).limit(20).all()
     
-    # Calculate remaining time for posts
     for post in posts:
         expiration_time = post.created_at + timedelta(hours=3)
         remaining_seconds = (expiration_time - now_utc).total_seconds()
@@ -390,7 +367,6 @@ def followed_feed():
     now_utc = datetime.now(timezone.utc)
     cutoff = now_utc - timedelta(hours=3)
     
-    # Get posts from followed users that haven't expired
     posts = current_user.followed_posts().filter(Post.created_at > cutoff).all()
     
     for post in posts:
@@ -404,7 +380,7 @@ def followed_feed():
 @login_required
 def feed():
     """Main feed of posts"""
-    feed_type = request.args.get('type', 'all')  # 'all' or 'followed'
+    feed_type = request.args.get('type', 'all')
     
     now_utc = datetime.now(timezone.utc)
     cutoff = now_utc - timedelta(hours=3)
