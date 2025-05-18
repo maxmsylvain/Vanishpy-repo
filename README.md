@@ -17,8 +17,9 @@ Vanish is a unique social platform where posts disappear after 3 hours. It's des
 - **Frontend**: HTML, CSS, JavaScript
 - **Task Scheduling**: APScheduler for automatic post deletion
 
+### To View Code, visit master branch
+
 ## Installation
-# To View Code, visit master branch
 
 1. Clone the repository:
    ```
